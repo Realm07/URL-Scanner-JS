@@ -1,0 +1,48 @@
+# Python venv
+venv/
+ENV/
+env/
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# IDE
+.vscode/
+.idea/
+
+# Project output
+output/
+
+# Test artifacts
+tests/__pycache__/
+tests/*.pyc
+
+# Logs
+*.log
+
+# Zip files / archives
+*.zip
+*.tar
+*.tar.gz
+
+# Juice Shop extracted folder
+juiceshop/
+juice-shop*/
+JuiceShop*/
+**/juice-shop*/
+
+# You probably don’t want to track vulnerable HTML playground files
+vulnerable_test_page.html
+1vulnerable_test_page.html
+
+# Scanner configs & patterns (your choice; usually safe to ignore)
+chromium_patterns.json
+config.yaml
+
+# OS noise
+.DS_Store
+Thumbs.db
