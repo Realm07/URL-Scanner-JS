@@ -1,0 +1,7 @@
+playwright
+py-esprima
+PyYAML
+requests
+jsbeautifier
+google-generativeai
+jinja2
