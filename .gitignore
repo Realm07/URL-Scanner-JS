@@ -35,11 +35,10 @@ juice-shop*/
 JuiceShop*/
 **/juice-shop*/
 
-# You probably don’t want to track vulnerable HTML playground files
-vulnerable_test_page.html
-1vulnerable_test_page.html
+old_vulnerable_test_page.html
+todo.txt
 
-# Scanner configs & patterns (your choice; usually safe to ignore)
+# Scanner configs & patterns (
 chromium_patterns.json
 config.yaml
 
