@@ -8,16 +8,25 @@ from pathlib import Path
 from typing import List, Dict, Any
 
 def sanitize_filename(url: str) -> str:
-    """Converts a URL into a safe filename."""
-    # Remove protocol
+    """
+    converts a url into a safe filename.
+    windows has a 260 char path limit and hates special chars like ':',
+    so we have to be aggressive here.
+    """
+    # remove protocol
     sanitized = re.sub(r'https?://', '', url)
-    # Replace invalid chars
+    # replace invalid chars
     sanitized = re.sub(r'[\\/*?:"<>|]', '_', sanitized)
-    # Truncate
+    # truncate
     return (sanitized[:150] + '...') if len(sanitized) > 150 else sanitized
 
 def shannon_entropy(data: str) -> float:
-    """Calculates the Shannon entropy of a string."""
+    """
+    calculates the shannon entropy of a string.
+    in plain english: it measures how "random" the string is.
+    'aaaaa' has low entropy. '8f7d2a1' has high entropy.
+    we use this to find api keys that don't match a specific regex.
+    """
     if not data:
         return 0
     entropy = 0
@@ -29,8 +38,8 @@ def shannon_entropy(data: str) -> float:
 
 def load_chromium_patterns(json_path: Path) -> List[Dict]:
     """
-    Loads Chromium autofill patterns, filtering for 'en' (English) only.
-    Returns a list of compiled regex objects with metadata.
+    loads chromium autofill patterns, filtering for 'en' (english) only.
+    returns a list of compiled regex objects with metadata.
     """
     compiled_rules = []
     
@@ -39,18 +48,18 @@ def load_chromium_patterns(json_path: Path) -> List[Dict]:
             data = json.load(f)
             
         for field_type, languages in data.items():
-            # Skip comments or metadata keys
+            # skip comments or metadata keys
             if not isinstance(languages, dict):
                 continue
                 
-            # We only care about English patterns
+            # we only care about english patterns
             if 'en' in languages:
                 for rule in languages['en']:
                     pattern_str = rule.get('positive_pattern')
                     if pattern_str:
                         try:
-                            # Chromium regexes are case-insensitive usually.
-                            # We use re.IGNORECASE to be lenient.
+                            # chromium regexes are case-insensitive usually.
+                            # we use re.ignorecase to be lenient.
                             regex = re.compile(pattern_str, re.IGNORECASE)
                             compiled_rules.append({
                                 "field_type": field_type, # e.g., ADDRESS_HOME_APT_NUM
@@ -58,7 +67,7 @@ def load_chromium_patterns(json_path: Path) -> List[Dict]:
                                 "score": rule.get('positive_score', 1.0)
                             })
                         except re.error:
-                            # Some regexes might be C++ specific and fail in Python
+                            # some regexes might be c++ specific and fail in python
                             pass
                             
     except Exception as e:
@@ -67,12 +76,15 @@ def load_chromium_patterns(json_path: Path) -> List[Dict]:
     return compiled_rules
 
 def save_findings_to_csv(findings: List[Dict[str, Any]], output_path: Path):
-    """Saves findings to CSV."""
+    """
+    saves findings to csv.
+    csv is ugly, but everyone loves opening things in excel.
+    """
     if not findings:
         print("[INFO] No findings to save.")
         return
 
-    # Dynamically get headers, ensuring we capture all possible keys
+    # dynamically get headers, ensuring we capture all possible keys
     headers = set()
     for f in findings:
         headers.update(f.keys())

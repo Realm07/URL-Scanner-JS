@@ -7,6 +7,8 @@ from playwright.async_api import async_playwright, Error
 
 from py_scanner.utils import sanitize_filename
 
+# we don't want to waste time crawling binary files or media.
+# it's just bandwidth for no reason.
 IGNORED_EXTENSIONS = [
     '.zip', '.pdf', '.png', '.jpg', '.jpeg', '.gif', '.css', '.ico',
     '.woff', '.woff2', '.ttf', '.eot', '.svg', '.mp4', '.mp3'
@@ -14,8 +16,11 @@ IGNORED_EXTENSIONS = [
 
 async def crawl_and_collect(start_url: str, max_pages: int, js_output_dir: Path) -> dict[str, str]:
     """
-    Crawls a website and collects both external AND inline JavaScript.
-    Also attempts to discover dynamically imported files (chunks/config).
+    spiders the site to find every scrap of javascript we can.
+    we look for:
+    1. standard <script src="..."> tags
+    2. inline <script>...</script> blocks
+    3. dynamic imports (e.g. import('./chunk.js')) which are often missed by static tools.
     """
     print(f"[INFO] Starting crawl from: {start_url}")
     
@@ -31,37 +36,49 @@ async def crawl_and_collect(start_url: str, max_pages: int, js_output_dir: Path)
     urls_to_visit = deque([start_url])
     visited_urls = set()
     collected_scripts = {}
+    
+    # this regex is trying to catch modern js imports.
+    # it looks for both static 'import ... from "..."' and dynamic 'import("...")'
     import_pattern = re.compile(r'(?:import\s+(?:.*?from\s+)?["\']([^"\']+)["\'])|(?:import\(["\']([^"\']+)["\']\))')
+    
     async with async_playwright() as p:
         browser = await p.chromium.launch()
         page = await browser.new_page()
 
+        # we hook into the network layer directly. this is way more reliable
+        # than scraping the dom for <script> tags because it catches everything
+        # the browser actually loads, including stuff injected by other scripts.
         async def handle_response(response):
             content_type = response.headers.get('content-type', '')
-            # Capture standard JS files AND files ending in common JS extensions
+            
+            # we want anything that smells like javascript.
             if 'javascript' in content_type or response.url.endswith(('.js', '.jsx', '.ts', '.tsx')):
                 if response.url not in collected_scripts:
                     try:
                         content = await response.text()
                         collected_scripts[response.url] = content
                         
-                        # --- IMPROVED IMPORT DISCOVERY ---
+                        # --- improved import discovery ---
+                        # we scan every js file we find for *more* js files.
+                        # this helps us find lazy-loaded chunks that might not be on the initial page load.
                         matches = import_pattern.findall(content)
                         for match in matches:
-                            # match is a tuple, pick the non-empty one
+                            # match is a tuple because of the two groups in the regex.
+                            # we just want the one that matched.
                             relative_path = match[0] or match[1]
                             
-                            # FILTER: Skip node_modules, external links, and suspicious dynamic strings
+                            # filter out noise. we don't care about node_modules or external libs.
                             if (relative_path.startswith('http') or 
                                 'node_modules' in relative_path or 
                                 '{' in relative_path or 
                                 ' ' in relative_path):
                                 continue
                             
-                            # Clean up path (remove query params if any)
+                            # strip query params like ?v=1.2.3
                             relative_path = relative_path.split('?')[0]
 
-                            # Candidate generation (handling missing extensions)
+                            # developers are lazy and often omit extensions.
+                            # we have to guess what file they're actually importing.
                             candidates = [relative_path]
                             if not any(relative_path.endswith(ext) for ext in ['.js', '.jsx', '.ts', '.tsx']):
                                 candidates = [
@@ -73,17 +90,17 @@ async def crawl_and_collect(start_url: str, max_pages: int, js_output_dir: Path)
                             
                             for candidate in candidates:
                                 try:
-                                    # Handle absolute imports like "/src/config.js"
+                                    # handle absolute imports (starting with /) vs relative (starting with ./ or ../)
                                     if candidate.startswith('/'):
-                                        # Join with the root domain, not the current file's URL
                                         parsed_start = urlparse(start_url)
                                         base = f"{parsed_start.scheme}://{parsed_start.netloc}"
                                         new_script_url = urljoin(base, candidate)
                                     else:
-                                        # Relative import
                                         new_script_url = urljoin(response.url, candidate)
                                     
                                     parsed_new = urlparse(new_script_url)
+                                    
+                                    # stay in scope! we don't want to crawl the entire internet.
                                     if (parsed_new.hostname == start_domain and 
                                         new_script_url not in visited_urls and 
                                         new_script_url not in urls_to_visit):
@@ -91,7 +108,7 @@ async def crawl_and_collect(start_url: str, max_pages: int, js_output_dir: Path)
                                 except:
                                     pass
                         
-                        # Save the file locally
+                        # dump it to disk so we can analyze it later if needed.
                         filename = sanitize_filename(response.url) + ".js"
                         filepath = js_output_dir / filename
                         with open(filepath, 'w', encoding='utf-8') as f:
@@ -110,9 +127,12 @@ async def crawl_and_collect(start_url: str, max_pages: int, js_output_dir: Path)
             visited_urls.add(current_url)
 
             try:
+                # networkidle is expensive but necessary. we need to wait for the
+                # initial flurry of requests to settle down.
                 await page.goto(current_url, wait_until='networkidle', timeout=30000)
                 
-                # --- INLINE SCRIPT COLLECTION ---
+                # --- inline script collection ---
+                # sometimes the juicy secrets are right in the html, not in an external file.
                 inline_scripts = await page.eval_on_selector_all(
                     'script:not([src])', 
                     'scripts => scripts.map(s => s.textContent)'
@@ -120,6 +140,7 @@ async def crawl_and_collect(start_url: str, max_pages: int, js_output_dir: Path)
                 
                 for i, script_content in enumerate(inline_scripts):
                     if script_content:
+                        # we give these fake urls so they fit into our data model.
                         inline_script_url = f"{current_url}#inline-script-{i+1}"
                         if inline_script_url not in collected_scripts:
                             collected_scripts[inline_script_url] = script_content
@@ -128,7 +149,8 @@ async def crawl_and_collect(start_url: str, max_pages: int, js_output_dir: Path)
                             with open(filepath, 'w', encoding='utf-8') as f:
                                 f.write(script_content)
 
-                # --- LINK DISCOVERY ---
+                # --- link discovery ---
+                # find more pages to crawl.
                 links = await page.eval_on_selector_all('a', 'as => as.map(a => a.href)')
                 
                 for link in links:
@@ -144,7 +166,7 @@ async def crawl_and_collect(start_url: str, max_pages: int, js_output_dir: Path)
                     except Exception:
                         continue
             except Error as e:
-                # It's common for some pages to fail or timeout, just log and continue
+                # playwright can be flaky. if a page times out, we just move on.
                 print(f"[DEBUG] Playwright error on page {current_url}: {e}")
             except Exception as e:
                 print(f"[ERROR] Could not process page {current_url}: {e}")

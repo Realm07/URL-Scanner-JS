@@ -37,6 +37,7 @@ JuiceShop*/
 
 old_vulnerable_test_page.html
 todo.txt
+vulnerable_test_page.html
 
 # Scanner configs & patterns (
 chromium_patterns.json

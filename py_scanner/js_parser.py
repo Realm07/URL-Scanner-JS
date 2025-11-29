@@ -4,18 +4,19 @@ import re
 def parse_js_to_ast(js_code: str) -> dict | None:
     if not js_code: return None
 
-    # --- STRATEGY 1: Try parsing standard JS ---
+    # --- strategy 1: try parsing standard js ---
+    # this is the happy path. if the code is valid es5/es6, esprima handles it.
     try:
         parsed = esprima.parseModule(js_code, options={'loc': True, 'comment': True})
         return _package_ast(parsed)
     except Exception:
-        pass # Fall through to Strategy 2
+        pass # fall through to strategy 2
 
-    # --- STRATEGY 2: Naive JSX Stripping ---
-    # Remove anything that looks like an XML tag <...>.
-    # This is destructive but preserves the JS logic around it.
-    # Regex explanation: Match <...> OR </...> and replace with empty string.
-    # Note: This is imperfect but often allows Esprima to parse the remaining JS.
+    # --- strategy 2: naive jsx stripping ---
+    # okay, this is a bit of a hack. esprima chokes on jsx (react syntax),
+    # so we just brutally rip out anything that looks like an xml tag.
+    # it's destructive, but it preserves the underlying logic which is what we care about.
+    # we're basically betting that the security flaw isn't inside the html tag itself.
     try:
         clean_code = re.sub(r'<[^>]+>', '', js_code)
         parsed = esprima.parseModule(clean_code, options={'loc': True, 'comment': True})
@@ -24,7 +25,10 @@ def parse_js_to_ast(js_code: str) -> dict | None:
         return None
 
 def _package_ast(parsed):
-    """Helper to package the result consistently."""
+    """
+    just a helper to make sure our output format is consistent
+    regardless of which parser strategy succeeded.
+    """
     ast_dict = parsed.toDict()
     raw_comments = parsed.comments if hasattr(parsed, 'comments') else []
     clean_comments = []

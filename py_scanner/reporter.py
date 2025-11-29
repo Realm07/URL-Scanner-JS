@@ -4,6 +4,9 @@ from pathlib import Path
 from typing import List, Dict, Any
 from jinja2 import Template
 
+# we embed the html template directly in the python file.
+# it's a bit ugly, but it makes the scanner portable (single file distribution)
+# and avoids "template not found" errors when users run it from weird directories.
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -89,7 +92,10 @@ HTML_TEMPLATE = """
 """
 
 def generate_html_report(findings: List[Dict[str, Any]], domain: str, output_path: Path):
-    """Generates a standalone HTML report from findings."""
+    """
+    generates a standalone html report from findings.
+    we use jinja2 because f-strings get messy with html.
+    """
     if not findings:
         return
 

@@ -5,8 +5,9 @@ import os
 
 def load_chromium_patterns(filepath: str) -> list:
     """
-    Loads the Chromium JSON, extracts 'en' regexes, and compiles them.
-    Returns a list of dicts: [{'type': 'EMAIL', 'regex': compiled_regex}, ...]
+    loads the chromium json, extracts 'en' regexes, and compiles them.
+    we're piggybacking off the hard work the chrome team did to identify pii fields.
+    returns a list of dicts: [{'type': 'EMAIL', 'regex': compiled_regex}, ...]
     """
     if not os.path.exists(filepath):
         print(f"[WARN] Pattern file not found: {filepath}")
@@ -19,17 +20,19 @@ def load_chromium_patterns(filepath: str) -> list:
             data = json.load(f)
 
         for field_type, languages in data.items():
-            # Skip comments or metadata keys
+            # skip comments or metadata keys
             if field_type.startswith("__"):
                 continue
             
-            # We only care about English for now
+            # we only care about english for now.
+            # supporting other languages would be cool, but let's not boil the ocean yet.
             if 'en' in languages:
                 for entry in languages['en']:
                     pattern_str = entry.get('positive_pattern')
                     if pattern_str:
                         try:
-                            # Compile with IGNORECASE to be lenient
+                            # compile with ignorecase to be lenient.
+                            # users are messy typists.
                             regex = re.compile(pattern_str, re.IGNORECASE)
                             compiled_patterns.append({
                                 'type': field_type,
