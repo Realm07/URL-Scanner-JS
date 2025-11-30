@@ -37,8 +37,10 @@ def analyze_with_llm(js_code: str, file_name: str) -> list:
     # why? because it's fast, cheap, and has a massive context window.
     # we don't need gpt-4 level reasoning to spot a hardcoded password.
     model = genai.GenerativeModel(
-        'gemini-2.5-flash',
-        generation_config={"response_mime_type": "application/json"}
+        'gemini-2.5-flash-lite',
+        generation_config={
+            "response_mime_type": "application/json"
+        }
     )
 
     # 1. optimization: beautify the code so the llm understands variable scope

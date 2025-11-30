@@ -10,6 +10,7 @@ app = Flask(__name__)
 
 # we need a thread-safe way to pass logs from the background scanner
 # to the main flask thread. a simple queue is the easiest solution here.
+# think of it like a conveyor belt: scanner puts logs on, flask takes them off.
 log_queue = queue.Queue()
 
 def log_to_queue(message):
@@ -33,6 +34,7 @@ def index():
     if output_path.exists():
         for p in output_path.iterdir():
             if p.is_dir():
+                # check if we actually generated a report for this scan.
                 report_file = p / "ast_scan_report.html"
                 has_report = report_file.exists()
                 history.append({
@@ -52,6 +54,9 @@ def index():
 
 @app.route('/start_scan', methods=['POST'])
 def run_scan():
+    """
+    kicks off the scanning process.
+    """
     data = request.json
     url = data.get('url')
     max_pages = int(data.get('max_pages', 10))
@@ -83,7 +88,7 @@ def run_scan():
 def stream_logs():
     """
     handles the real-time log streaming using server-sent events (sse).
-    websockets were overkill for this.
+    websockets were overkill for this. sse is simple and works great for one-way updates.
     """
     def generate():
         while True:

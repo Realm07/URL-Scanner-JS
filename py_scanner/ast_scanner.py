@@ -4,7 +4,8 @@ import re
 from pathlib import Path
 from typing import Iterator, List
 from urllib.parse import urlparse, parse_qs
-from .utils import shannon_entropy, load_chromium_patterns
+from .utils import shannon_entropy
+from .pattern_loader import load_chromium_patterns
 
 # --- global cache for chromium patterns ---
 CHROMIUM_RULES: List[dict] = []
@@ -77,7 +78,11 @@ def _check_chromium_in_node(node: dict, config: dict):
     # they probably mean it.
     if node.get('type') == 'VariableDeclarator':
         var_name = node.get('id', {}).get('name', '')
-        return _check_chromium_match(var_name, _get_line_number(node), "Variable Name")
+        return _check_chromium_match(
+            var_name, 
+            _get_line_number(node), 
+            "Variable Name"
+        )
 
     # 2. check property names (user.creditCardNumber = ...)
     # also high signal. object properties are usually very descriptive.
@@ -85,7 +90,11 @@ def _check_chromium_in_node(node: dict, config: dict):
         key_node = node.get('key', {})
         prop_name = key_node.get('name') or key_node.get('value')
         if isinstance(prop_name, str):
-            return _check_chromium_match(prop_name, _get_line_number(node), "Property Key")
+            return _check_chromium_match(
+                prop_name, 
+                _get_line_number(node), 
+                "Property Key"
+            )
     
     return None
 
@@ -101,8 +110,14 @@ def scan_raw_text(script_code: str, config: dict) -> Iterator[dict]:
         line_num = i + 1
         
         # 1. check pii (regex) - keep this
-        pii = _check_pii(line, line_num, "Raw Text", config)
-        if pii: yield pii
+        pii = _check_pii(
+            line, 
+            line_num, 
+            "Raw Text", 
+            config
+        )
+        if pii: 
+            yield pii
         
         # 2. check vendor patterns (regex) - keep this
         for rule in config['patterns'].get('vendor_regexes', []):
@@ -113,13 +128,7 @@ def scan_raw_text(script_code: str, config: dict) -> Iterator[dict]:
                     "line": line_num
                 }
                 
-        # 3. check chromium patterns - remove this
-        # without ast context, checking for words like "name" or "zip" 
-        # on every line of code produces way too much noise.
-        # chromium = _check_chromium_match(line, line_num, "Raw Text")
-        # if chromium: yield chromium
-
-        # 4. generic assignment check - keep this
+        # 3. generic assignment check - keep this
         match = GENERIC_ASSIGNMENT_REGEX.search(line)
         if match:
             key = match.group(1)
@@ -300,7 +309,12 @@ def _check_suspicious_url_params(node: dict, config: dict):
 
 def _check_pii_in_node(node: dict, config: dict):
     if node.get('type') == 'Literal' and isinstance(node.get('value'), str):
-        return _check_pii(node['value'], _get_line_number(node), "Code Literal", config)
+        return _check_pii(
+            node['value'], 
+            _get_line_number(node), 
+            "Code Literal", 
+            config
+        )
     return None
 
 def _check_vendor_patterns(node: dict, config: dict):
@@ -373,17 +387,27 @@ def scan_ast_and_comments(parsed_data: dict, config: dict) -> Iterator[dict]:
         yield from _scan_ast_recursive(ast, config)
 
     for comment in comments:
-        if not isinstance(comment, dict): continue
+        if not isinstance(comment, dict): 
+            continue
         
         comment_text = comment.get('value', '')
         line = _get_line_number(comment)
         
         # check config pii in comments
-        finding = _check_pii(comment_text, line, "Comment", config)
+        finding = _check_pii(
+            comment_text, 
+            line, 
+            "Comment", 
+            config
+        )
         if finding:
             yield finding
         
         # check chromium patterns in comments
-        finding = _check_chromium_match(comment_text, line, "Comment")
+        finding = _check_chromium_match(
+            comment_text, 
+            line, 
+            "Comment"
+        )
         if finding:
             yield finding

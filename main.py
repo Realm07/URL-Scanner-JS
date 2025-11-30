@@ -13,22 +13,40 @@ from datetime import datetime
 from py_scanner.crawler import crawl_and_collect
 from py_scanner.js_parser import parse_js_to_ast
 from py_scanner.ast_scanner import scan_ast_and_comments, initialize_chromium_rules, scan_raw_text
+from py_scanner.llm_analyzer import analyze_with_llm
 from py_scanner.utils import save_findings_to_csv
 from py_scanner.reporter import generate_html_report
-from py_scanner.llm_analyzer import analyze_with_llm
 
+# we skip these because they are usually safe or just noise.
+# scanning jquery for the 1000th time isn't going to find a 0-day.
 IGNORE_KEYWORDS = [
-    "vendor", "jquery", "bootstrap", "polyfill", "runtime", 
-    "node_modules", "framework", "bundle", "min.js", 
-    "cookieconsent", "high-contrast", "zone.js",
-    "react", "angular", "vue", "backbone", "lodash", "underscore",
-    "chart", "d3", "three", "moment", "axios",
-    "chunk-", "npm", "assets/"
+    "vendor",
+    "jquery", 
+    "bootstrap", 
+    "polyfill", 
+    "runtime", 
+    "node_modules", 
+    "framework", 
+    "bundle", 
+    "min.js", 
+    "cookieconsent", 
+    "high-contrast", 
+    "zone.js",
+    "react", 
+    "angular", 
+    "vue", 
+    "backbone", 
+    "lodash", 
+    "underscore",
+    "chart", 
+    "d3", 
+    "three", 
+    "moment", 
+    "axios",
+    "chunk-", 
+    "npm", 
+    "assets/"
 ]
-
-# we need a global way to send logs back to the ui without passing
-# the callback through every single function call.
-LOG_CALLBACK = None
 
 def log(message):
     """
@@ -41,6 +59,11 @@ def log(message):
         LOG_CALLBACK(message) 
 
 async def analyze_file_task(script_url, script_code, config, semaphore, all_findings):
+    """
+    this is the worker function that analyzes a single file.
+    it runs in parallel with other workers.
+    """
+    # skip boring files.
     if any(k in script_url.lower() for k in IGNORE_KEYWORDS):
         return
 
@@ -49,9 +72,12 @@ async def analyze_file_task(script_url, script_code, config, semaphore, all_find
     file_has_vulnerability = False 
     heuristic_hits = 0
     
+    # step 1: try to parse the code into an AST (Abstract Syntax Tree).
+    # this is the "smart" way to read code. it understands variables and functions.
     parsed_data = parse_js_to_ast(script_code)
     
     if parsed_data:
+        # if parsing worked, we scan the AST.
         findings = list(scan_ast_and_comments(parsed_data, config))
         for finding in findings:
             finding['file_url'] = script_url
@@ -71,8 +97,10 @@ async def analyze_file_task(script_url, script_code, config, semaphore, all_find
             heuristic_hits += 1
             file_has_vulnerability = True
 
+    # step 2: decide if we need to call in the big guns (the AI).
     should_llm_scan = False
     
+    # if the heuristics found something, we definitely want the AI to double-check it.
     if heuristic_hits > 0:
         should_llm_scan = True
     
@@ -107,12 +135,12 @@ async def analyze_file_task(script_url, script_code, config, semaphore, all_find
                         "method": "AI (LLM)"
                     })
 
+    # step 3: if we found something, save a readable copy of the code.
     if file_has_vulnerability:
         try:
             import jsbeautifier
             from py_scanner.utils import sanitize_filename
             
-            # if we found something, we want to save a readable copy of the code.
             # minified js is a nightmare to debug, so we run it through a beautifier first.
             parsed_url = urlparse(script_url)
             domain_str = f"{parsed_url.hostname}_{parsed_url.port}" if parsed_url.port else parsed_url.hostname
@@ -126,6 +154,7 @@ async def analyze_file_task(script_url, script_code, config, semaphore, all_find
                 f.write(beautified_code)
             log(f"  [+] Saved readable copy: {safe_name}.readable.js")
         except Exception as e:
+            # if beautifying fails, it's not the end of the world.
             pass
 
 async def run_scanner_core(url, max_pages, api_key=None, scan_mode='js-only'):
@@ -145,6 +174,7 @@ async def run_scanner_core(url, max_pages, api_key=None, scan_mode='js-only'):
         log(f"[ERROR] Config error: {e}")
         return
 
+    # load the regex patterns for finding secrets.
     initialize_chromium_rules("chromium_patterns.json")
 
     try:
@@ -162,6 +192,7 @@ async def run_scanner_core(url, max_pages, api_key=None, scan_mode='js-only'):
         log("[ERROR] Invalid URL.")
         return
 
+    # phase 1: crawl the site and collect all the javascript.
     js_scripts = await crawl_and_collect(url, max_pages, js_dir, scan_mode=scan_mode)
 
     if not js_scripts:
@@ -171,7 +202,8 @@ async def run_scanner_core(url, max_pages, api_key=None, scan_mode='js-only'):
     log(f"\n[INFO] Starting Parallel Analysis on {len(js_scripts)} files...")
     
     all_findings = []
-    # limit concurrency so we don't blow up the cpu or hit api rate limits.
+    # we limit concurrency to 3 because the LLM API has rate limits
+    # and we don't want to melt the CPU.
     llm_semaphore = asyncio.Semaphore(3)
     
     tasks = []
@@ -179,12 +211,16 @@ async def run_scanner_core(url, max_pages, api_key=None, scan_mode='js-only'):
         task = analyze_file_task(script_url, code, config, llm_semaphore, all_findings)
         tasks.append(task)
     
+    # run all the analysis tasks at the same time.
     await asyncio.gather(*tasks)
 
     log("-" * 40)
     if all_findings:
         log(f"[SUCCESS] Found {len(all_findings)} potential vulnerabilities.")
         
+        # save the results in two formats:
+        # 1. CSV for the data nerds.
+        # 2. HTML for the managers who want pretty charts.
         save_findings_to_csv(all_findings, output_dir / "ast_scan_results.csv")
         generate_html_report(all_findings, url, output_dir / "ast_scan_report.html")
         

@@ -41,7 +41,7 @@ vulnerable_test_page.html
 
 # Scanner configs & patterns (
 chromium_patterns.json
-config.yaml
+
 
 # OS noise
 .DS_Store
