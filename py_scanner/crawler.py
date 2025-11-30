@@ -14,15 +14,15 @@ IGNORED_EXTENSIONS = [
     '.woff', '.woff2', '.ttf', '.eot', '.svg', '.mp4', '.mp3'
 ]
 
-async def crawl_and_collect(start_url: str, max_pages: int, js_output_dir: Path) -> dict[str, str]:
+async def crawl_and_collect(start_url: str, max_pages: int, js_output_dir: Path, scan_mode: str = 'js-only') -> dict[str, str]:
     """
     spiders the site to find every scrap of javascript we can.
     we look for:
     1. standard <script src="..."> tags
-    2. inline <script>...</script> blocks
+    2. inline <script>...</script> blocks (if scan_mode allows)
     3. dynamic imports (e.g. import('./chunk.js')) which are often missed by static tools.
     """
-    print(f"[INFO] Starting crawl from: {start_url}")
+    print(f"[INFO] Starting crawl from: {start_url} (Mode: {scan_mode})")
     
     try:
         start_domain = urlparse(start_url).hostname
@@ -51,8 +51,18 @@ async def crawl_and_collect(start_url: str, max_pages: int, js_output_dir: Path)
         async def handle_response(response):
             content_type = response.headers.get('content-type', '')
             
-            # we want anything that smells like javascript.
-            if 'javascript' in content_type or response.url.endswith(('.js', '.jsx', '.ts', '.tsx')):
+            # filter based on scan_mode
+            is_js_file = False
+            if scan_mode == 'js-only':
+                # strict check for .js extension
+                if response.url.split('?')[0].endswith('.js'):
+                    is_js_file = True
+            else:
+                # 'external' or 'all' - allow other extensions
+                if 'javascript' in content_type or response.url.split('?')[0].endswith(('.js', '.jsx', '.ts', '.tsx')):
+                    is_js_file = True
+
+            if is_js_file:
                 if response.url not in collected_scripts:
                     try:
                         content = await response.text()
@@ -132,22 +142,24 @@ async def crawl_and_collect(start_url: str, max_pages: int, js_output_dir: Path)
                 await page.goto(current_url, wait_until='networkidle', timeout=30000)
                 
                 # --- inline script collection ---
-                # sometimes the juicy secrets are right in the html, not in an external file.
-                inline_scripts = await page.eval_on_selector_all(
-                    'script:not([src])', 
-                    'scripts => scripts.map(s => s.textContent)'
-                )
-                
-                for i, script_content in enumerate(inline_scripts):
-                    if script_content:
-                        # we give these fake urls so they fit into our data model.
-                        inline_script_url = f"{current_url}#inline-script-{i+1}"
-                        if inline_script_url not in collected_scripts:
-                            collected_scripts[inline_script_url] = script_content
-                            filename = sanitize_filename(inline_script_url) + ".js"
-                            filepath = js_output_dir / filename
-                            with open(filepath, 'w', encoding='utf-8') as f:
-                                f.write(script_content)
+                # only if scan_mode is 'all'
+                if scan_mode == 'all':
+                    # sometimes the juicy secrets are right in the html, not in an external file.
+                    inline_scripts = await page.eval_on_selector_all(
+                        'script:not([src])', 
+                        'scripts => scripts.map(s => s.textContent)'
+                    )
+                    
+                    for i, script_content in enumerate(inline_scripts):
+                        if script_content:
+                            # we give these fake urls so they fit into our data model.
+                            inline_script_url = f"{current_url}#inline-script-{i+1}"
+                            if inline_script_url not in collected_scripts:
+                                collected_scripts[inline_script_url] = script_content
+                                filename = sanitize_filename(inline_script_url) + ".js"
+                                filepath = js_output_dir / filename
+                                with open(filepath, 'w', encoding='utf-8') as f:
+                                    f.write(script_content)
 
                 # --- link discovery ---
                 # find more pages to crawl.

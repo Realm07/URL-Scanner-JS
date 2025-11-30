@@ -128,7 +128,7 @@ async def analyze_file_task(script_url, script_code, config, semaphore, all_find
         except Exception as e:
             pass
 
-async def run_scanner_core(url, max_pages, api_key=None):
+async def run_scanner_core(url, max_pages, api_key=None, scan_mode='js-only'):
     """
     this is the brain of the operation. it orchestrates the whole flow:
     crawling -> parsing -> scanning -> reporting.
@@ -162,7 +162,7 @@ async def run_scanner_core(url, max_pages, api_key=None):
         log("[ERROR] Invalid URL.")
         return
 
-    js_scripts = await crawl_and_collect(url, max_pages, js_dir)
+    js_scripts = await crawl_and_collect(url, max_pages, js_dir, scan_mode=scan_mode)
 
     if not js_scripts:
         log("[INFO] No JS files found.")
@@ -194,15 +194,16 @@ async def run_scanner_core(url, max_pages, api_key=None):
     log("-" * 40)
 
 # wrapper to run async from sync context
-def start_scan(url, max_pages, api_key=None, callback=None):
+def start_scan(url, max_pages, api_key=None, callback=None, scan_mode='js-only'):
     global LOG_CALLBACK
     LOG_CALLBACK = callback
-    asyncio.run(run_scanner_core(url, max_pages, api_key))
+    asyncio.run(run_scanner_core(url, max_pages, api_key, scan_mode))
 
 # cli entry point
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-u", "--url", required=True)
     parser.add_argument("-m", "--max-pages", type=int, default=10)
+    parser.add_argument("--scan-mode", choices=['all', 'external', 'js-only'], default='js-only', help="Scanning mode: 'all' (everything), 'external' (no inline), 'js-only' (.js files only)")
     args = parser.parse_args()
-    start_scan(args.url, args.max_pages)
+    start_scan(args.url, args.max_pages, scan_mode=args.scan_mode)

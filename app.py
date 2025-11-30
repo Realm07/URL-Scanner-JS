@@ -56,6 +56,7 @@ def run_scan():
     url = data.get('url')
     max_pages = int(data.get('max_pages', 10))
     api_key = data.get('api_key')
+    scan_mode = data.get('scan_mode', 'js-only')
 
     if not url:
         return jsonify({"status": "error", "message": "URL is required"}), 400
@@ -65,7 +66,7 @@ def run_scan():
     # we spin up a daemon-ish thread to do the heavy lifting.
     def target():
         try:
-            start_scan(url, max_pages, api_key, callback=log_to_queue)
+            start_scan(url, max_pages, api_key, callback=log_to_queue, scan_mode=scan_mode)
             log_to_queue("[DONE] Scan Finished.")
         except Exception as e:
             # if something blows up in the thread, we need to make sure
