@@ -1,0 +1,220 @@
+# config.yaml
+
+patterns:
+  # --- CONFIGURATION SETTINGS ---
+  min_secret_length: 20 # Lowered slightly to catch some shorter API keys
+  min_entropy_threshold: 4.5
+  secret_character_set_regex: '^[a-zA-Z0-9_-]+$'
+
+  # --- NOISE REDUCTION ---
+  ignore_prefixes:
+    - 'THREE.'
+    - 'function $'
+    - 'webpack'
+    - 'sourceMappingURL'
+    - 'data:image'
+    - 'define('
+    - 'return'
+    - 'class='
+    - '<svg'
+    - 'path d='
+    - 'name":'
+    - 'path":'
+    - 'contentType":'
+    - 'ctf.key'
+    - 'lineNumber'
+    - 'columnNumber'
+    - 'fileName'
+
+  # --- SECRETFINDER VENDOR PATTERNS (Ported & Cleaned) ---
+  # These are checked against string literals in the code.
+  vendor_regexes:
+    - name: "Google API Key"
+      pattern: 'AIza[0-9A-Za-z-_]{35}'
+    - name: "Firebase URL"
+      pattern: 'AAAA[A-Za-z0-9_-]{7}:[A-Za-z0-9_-]{140}'
+    - name: "Google Captcha"
+      pattern: '6L[0-9A-Za-z-_]{38}|^6[0-9a-zA-Z_-]{39}$'
+    - name: "Google OAuth"
+      pattern: 'ya29\.[0-9A-Za-z\-_]+'
+    - name: "Amazon AWS Access Key ID"
+      pattern: 'A[SK]IA[0-9A-Z]{16}'
+    - name: "Amazon MWS Auth Token"
+      pattern: 'amzn\.mws\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+    - name: "Amazon S3 Bucket"
+      pattern: 's3\.amazonaws\.com[/]+|[a-zA-Z0-9_-]*\.s3\.amazonaws\.com'
+    - name: "Facebook Access Token"
+      pattern: 'EAACEdEose0cBA[0-9A-Za-z]+'
+    - name: "Mailgun API Key"
+      pattern: 'key-[0-9a-zA-Z]{32}'
+    - name: "Twilio API Key"
+      pattern: 'SK[0-9a-fA-F]{32}'
+    - name: "Twilio Account SID"
+      pattern: 'AC[a-zA-Z0-9_\-]{32}'
+    - name: "Twilio App SID"
+      pattern: 'AP[a-zA-Z0-9_\-]{32}'
+    - name: "PayPal/Braintree Token"
+      pattern: 'access_token\$production\$[0-9a-z]{16}\$[0-9a-f]{32}'
+    - name: "Square OAuth Secret"
+      pattern: 'sq0csp-[ 0-9A-Za-z\-_]{43}|sq0[a-z]{3}-[0-9A-Za-z\-_]{22,43}'
+    - name: "Square Access Token"
+      pattern: 'sqOatp-[0-9A-Za-z\-_]{22}|EAAA[a-zA-Z0-9]{60}'
+    - name: "Stripe Standard API"
+      pattern: 'sk_live_[0-9a-zA-Z]{24}'
+    - name: "Stripe Restricted API"
+      pattern: 'rk_live_[0-9a-zA-Z]{24}'
+    - name: "GitHub Access Token"
+      pattern: '[a-zA-Z0-9_-]*:[a-zA-Z0-9_\-]+@github\.com*'
+    - name: "RSA Private Key"
+      pattern: '-----BEGIN RSA PRIVATE KEY-----'
+    - name: "SSH DSA Private Key"
+      pattern: '-----BEGIN DSA PRIVATE KEY-----'
+    - name: "SSH EC Private Key"
+      pattern: '-----BEGIN EC PRIVATE KEY-----'
+    - name: "PGP Private Key Block"
+      pattern: '-----BEGIN PGP PRIVATE KEY BLOCK-----'
+    - name: "JSON Web Token (JWT)"
+      pattern: 'ey[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*$'
+    - name: "Slack Token"
+      pattern: '(xox[a-zA-Z]-[a-zA-Z0-9-]+)'
+    - name: "Heroku API Key"
+      pattern: '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
+    - name: "Generic Authorization Basic"
+      pattern: 'basic [a-zA-Z0-9=:_\+\/-]{5,100}'
+    - name: "Generic Authorization Bearer"
+      pattern: 'bearer [a-zA-Z0-9_\-\.=:_\+\/]{5,100}'
+    - name: "Generic API Key String"
+      pattern: 'api[key|_key|\s+]+[a-zA-Z0-9_\-]{7,100}'
+
+  # --- SECRETFINDER KEYWORDS (Ported & Categorized) ---
+  # These are used to check Variable Names and Property Keys in the AST.
+  suspicious_variable_names:
+    # Credentials
+    - password
+    - passwd
+    - pwd
+    - secret
+    - token
+    - credential
+    - auth
+    - apikey
+    - privatekey
+    - private_key
+    - access_key
+    - access_token
+    - api_key
+    - api_secret
+    - client_secret
+    - consumer_key
+    - db_password
+    - db_username
+    - encryption_key
+    - fb_secret
+    - gh_token
+    - github_token
+    - gitlab
+    - id_rsa
+    - ssh_key
+    - ssh_pass
+    - slack_api
+    - slack_token
+    # Services
+    - aws_access
+    - aws_key
+    - aws_secret
+    - aws_token
+    - s3_key
+    - s3_secret
+    - cloudfront
+    - digitalocean
+    - heroku
+    - mailchimp
+    - mailgun
+    - mysql
+    - postgres
+    - redis
+    - stripe
+    - twilio
+    # Identity
+    - username
+    - user_name
+    - login
+    - email
+    - ssn
+    - dob
+    - birth
+    - mobile
+    - phone
+    # Financial
+    - creditcard
+    - cardnumber
+    - ccv
+    - cvv
+    - iban
+
+  suspicious_property_names:
+    - apiKey
+    - clientSecret
+    - accessToken
+    - privateKey
+    - secretKey
+    - password
+    - authToken
+    - sessionToken
+    - connectionString
+    - awsSecretKey
+    - stripeKey
+
+  suspicious_header_names:
+    - authorization
+    - x-api-key
+    - x-auth-token
+    - bearer
+    - cookie
+    - set-cookie
+
+  suspicious_url_params:
+    - token
+    - key
+    - secret
+    - apikey
+    - auth
+    - access_token
+    - password
+    - u
+    - user
+
+  suspicious_url_keywords:
+    - /api/
+    - /v1/
+    - /_internal
+    - /graphql
+    - /admin
+    - /auth
+    - /login
+
+  # --- PII PATTERNS ---
+  pii_regexes:
+    - name: "Email Address"
+      pattern: '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+    - name: "IPv4 Address"
+      pattern: '\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b(?!\.)'
+    - name: "Phone Number (US/Generic)"
+      pattern: '\b(?:\+?1[-. ]?)?\(?([0-9]{3})\)?[-. ]?([0-9]{3})[-. ]?([0-9]{4})\b'
+    - name: "Database Connection String"
+      pattern: '(?:postgres|mysql|mongodb|redis)://[a-zA-Z0-9_]+:[a-zA-Z0-9_]+@[a-zA-Z0-9_.-]+'
+
+  pii_ignore_list:
+    - "example.com"
+    - "test.com"
+    - "localhost"
+    - "127.0.0.1"
+    - "0.0.0.0"
+    - "8.8.8.8"
+    - "w3.org"
+    - "jquery"
+    - "bootstrap"
+    - "react"
+    - "vue"
+    - "node_modules"
+    - "00000000-0000-0000-0000-000000000000"
